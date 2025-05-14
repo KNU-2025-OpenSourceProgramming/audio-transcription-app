@@ -1,69 +1,128 @@
-import React from 'react';
-import AppBar from '@material-ui/core/AppBar';
-import Toolbar from '@material-ui/core/Toolbar';
-import Typography from '@material-ui/core/Typography';
-import Button from '@material-ui/core/Button';
-import logo from './logo.svg';
+import React, { useState, useEffect } from 'react';
+import { AppBar, Toolbar, Typography, Button, Container, Paper, CircularProgress } from '@mui/material';
 import './App.css';
 
 function App() {
+  const [file, setFile] = useState(null);
+  const [transcription, setTranscription] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [wsStatus, setWsStatus] = useState('Not Connected');
+
   function setupWebSocket() {
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = new WebSocket('ws://localhost:3000/ws');
 
     socket.onopen = () => {
       console.log('WebSocket connection established');
+      setWsStatus('Connected');
     };
 
     socket.onmessage = (event) => {
-      console.log('Message from server ', event.data);
+      console.log('Message from server: ', event.data);
+      const data = JSON.parse(event.data);
+      if (data.type === 'transcription_update') {
+        setTranscription(data.text);
+      }
     };
 
     socket.onerror = (error) => {
       console.error('WebSocket error: ', error);
-      // 改善错误处理逻辑
-      alert('WebSocket error occurred. Please try again later.');
+      setWsStatus('Connection Error');
     };
 
     socket.onclose = (event) => {
       if (event.wasClean) {
         console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
       } else {
-        console.error('Connection died');
-        // 尝试重新连接
-        setTimeout(setupWebSocket, 5000);
+        console.error('Connection lost');
       }
+      setWsStatus('Not Connected');
+      setTimeout(setupWebSocket, 5000);
     };
+
+    return socket;
   }
 
-  // 在组件挂载时调用setupWebSocket
-  React.useEffect(() => {
-    setupWebSocket();
+  useEffect(() => {
+    const socket = setupWebSocket();
+    return () => {
+      socket.close();
+    };
   }, []);
+
+  const handleFileChange = (event) => {
+    setFile(event.target.files[0]);
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      alert('Please select an audio file first');
+      return;
+    }
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('http://localhost:3000/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const data = await response.json();
+      console.log('Upload successful:', data);
+      setTranscription('File uploaded, waiting for transcription...');
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Upload failed, please try again');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="App">
       <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6" style={{ flexGrow: 1 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Audio Transcription App
           </Typography>
-          <Button color="inherit" style={{ backgroundColor: '#3f51b5', color: '#fff', margin: '0 10px' }}>Login</Button>
+          <Typography variant="body2" sx={{ marginRight: 2 }}>
+            WebSocket Status: {wsStatus}
+          </Typography>
         </Toolbar>
       </AppBar>
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      
+      <Container maxWidth="md" sx={{ marginTop: 5 }}>
+        <Paper elevation={3} sx={{ padding: 3 }}>
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={handleFileChange}
+            style={{ marginBottom: 20 }}
+          />
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleUpload}
+            disabled={!file || loading}
+            sx={{ marginLeft: 2 }}
+          >
+            {loading ? <CircularProgress size={24} /> : 'Upload Audio'}
+          </Button>
+
+          {transcription && (
+            <Paper elevation={1} sx={{ marginTop: 2, padding: 2 }}>
+              <Typography variant="h6">Transcription Result:</Typography>
+              <Typography>{transcription}</Typography>
+            </Paper>
+          )}
+        </Paper>
+      </Container>
     </div>
   );
 }
