@@ -1,55 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Button, Container, Paper, CircularProgress } from '@mui/material';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  Container,
+  Box,
+  Paper,
+  TextField,
+  CircularProgress,
+} from '@mui/material';
 import './App.css';
 
 function App() {
+  // --- 状态定义 ---
   const [file, setFile] = useState(null);
-  const [transcription, setTranscription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [wsStatus, setWsStatus] = useState('Not Connected');
-  const fileInputRef = React.useRef(null);
+  const [transcription, setTranscription] = useState('');
+  const [transcriptions, setTranscriptions] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
 
-  function setupWebSocket() {
-    const socket = new WebSocket('ws://localhost:3000/ws');
+  const [websocketUrl, setWebsocketUrl] = useState(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    return `${protocol}//${host}/audio`;
+  });
 
-    socket.onopen = () => {
-      console.log('WebSocket connection established');
-      setWsStatus('Connected');
-    };
+  const fileInputRef = useRef(null);
+  const socketRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
-    socket.onmessage = (event) => {
-      console.log('Message from server: ', event.data);
-      const data = JSON.parse(event.data);
-      if (data.type === 'transcription_update') {
-        setTranscription(data.text);
-      }
-    };
-
-    socket.onerror = (error) => {
-      console.error('WebSocket error: ', error);
-      setWsStatus('Connection Error');
-    };
-
-    socket.onclose = (event) => {
-      if (event.wasClean) {
-        console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
-      } else {
-        console.error('Connection lost');
-      }
-      setWsStatus('Not Connected');
-      setTimeout(setupWebSocket, 5000);
-    };
-
-    return socket;
-  }
-
-  useEffect(() => {
-    const socket = setupWebSocket();
-    return () => {
-      socket.close();
-    };
-  }, []);
-
+  // --- 上传音频文件 ---
   const handleFileClick = () => {
     fileInputRef.current.click();
   };
@@ -70,77 +52,167 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:3000/upload', {
+      const response = await fetch('/upload', {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
+      if (!response.ok) throw new Error('Upload failed');
 
       const data = await response.json();
       console.log('Upload successful:', data);
       setTranscription('File uploaded, waiting for transcription...');
-    } catch (error) {
-      console.error('Upload error:', error);
+    } catch (err) {
+      console.error('Upload error:', err);
       alert('Upload failed, please try again');
     } finally {
       setLoading(false);
     }
   };
 
+  // --- 录音相关 ---
+  const handleStartRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorderRef.current = new MediaRecorder(stream);
+
+    mediaRecorderRef.current.ondataavailable = (event) => {
+      audioChunksRef.current.push(event.data);
+    };
+
+    mediaRecorderRef.current.onstop = () => {
+      sendAudioData();
+    };
+
+    mediaRecorderRef.current.start();
+    setIsRecording(true);
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const sendAudioData = () => {
+    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const buffer = reader.result;
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(buffer);
+      }
+      audioChunksRef.current = [];
+    };
+    reader.readAsArrayBuffer(audioBlob);
+  };
+
+  // --- WebSocket 连接 ---
+  const setupWebSocket = () => {
+    socketRef.current = new WebSocket(websocketUrl);
+
+    socketRef.current.onopen = () => {
+      console.log('WebSocket is connected.');
+    };
+
+    socketRef.current.onmessage = (event) => {
+      setTranscriptions((prev) => [...prev, event.data]);
+    };
+
+    socketRef.current.onerror = (err) => {
+      console.error('WebSocket error:', err);
+    };
+
+    socketRef.current.onclose = () => {
+      console.log('WebSocket closed');
+    };
+  };
+
+  useEffect(() => {
+    setupWebSocket();
+    return () => {
+      socketRef.current?.close();
+    };
+  }, [websocketUrl]);
+
+  // --- UI 渲染 ---
   return (
-    <div className="App">
+    <Container>
       <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Audio Transcription App
-          </Typography>
-          <Typography variant="body2" sx={{ marginRight: 2 }}>
-            WebSocket Status: {wsStatus}
-          </Typography>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>Audio Transcription App</Typography>
         </Toolbar>
       </AppBar>
-      
-      <Container maxWidth="md" sx={{ marginTop: 5 }}>
-        <Paper elevation={3} sx={{ padding: 3 }}>
+
+      <Box mt={2}>
+        <TextField
+          label="WebSocket URL"
+          value={websocketUrl}
+          fullWidth
+          onChange={(e) => setWebsocketUrl(e.target.value)}
+          style={{ marginBottom: 16 }}
+        />
+        <Button
+          variant="contained"
+          onClick={handleStartRecording}
+          disabled={isRecording}
+        >
+          Start Recording
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={handleStopRecording}
+          disabled={!isRecording}
+          sx={{ ml: 2 }}
+        >
+          Stop Recording
+        </Button>
+      </Box>
+
+      <Box mt={4}>
+        <Paper sx={{ p: 3 }}>
           <input
-            ref={fileInputRef}
             type="file"
-            accept="audio/*"
+            ref={fileInputRef}
             onChange={handleFileChange}
+            accept="audio/*"
             style={{ display: 'none' }}
           />
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={handleFileClick}
-            sx={{ marginRight: 2 }}
-          >
+          <Button onClick={handleFileClick} variant="outlined" sx={{ mr: 2 }}>
             Select Audio File
-            {file && <Typography variant="caption" sx={{ marginLeft: 1 }}>
-              ({file.name})
-            </Typography>}
           </Button>
           <Button
-            variant="contained"
-            color="primary"
             onClick={handleUpload}
+            variant="contained"
             disabled={!file || loading}
           >
             {loading ? <CircularProgress size={24} /> : 'Upload Audio'}
           </Button>
-
-          {transcription && (
-            <Paper elevation={1} sx={{ marginTop: 2, padding: 2 }}>
-              <Typography variant="h6">Transcription Result:</Typography>
-              <Typography>{transcription}</Typography>
-            </Paper>
+          {file && (
+            <Typography variant="caption" sx={{ ml: 2 }}>
+              ({file.name})
+            </Typography>
           )}
         </Paper>
-      </Container>
-    </div>
+      </Box>
+
+      <Box mt={4}>
+        {transcription && (
+          <Paper sx={{ p: 2, mt: 2 }}>
+            <Typography variant="h6">Transcription Result:</Typography>
+            <Typography>{transcription}</Typography>
+          </Paper>
+        )}
+        {transcriptions.length > 0 && (
+          <Box className="transcription-container">
+            {transcriptions.map((t, i) => (
+              <div key={i} className="chat-bubble">{t}</div>
+            ))}
+          </Box>
+        )}
+      </Box>
+    </Container>
   );
 }
 

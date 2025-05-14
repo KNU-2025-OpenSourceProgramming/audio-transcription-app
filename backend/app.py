@@ -11,6 +11,7 @@ import os
 from werkzeug.utils import secure_filename
 import json
 
+# 初始化 Flask 应用
 app = Flask(__name__,
     template_folder='./www',
     static_folder='./www',
@@ -18,7 +19,7 @@ app = Flask(__name__,
 )
 CORS(app)  # 允许所有域的访问
 sock = Sock(app)
-model = whisper.load_model("base")
+model = whisper.load_model("base")  # 加载 Whisper 模型
 
 # 确保上传目录存在
 UPLOAD_FOLDER = 'uploads'
@@ -33,7 +34,7 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html')  # 渲染主页
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -50,7 +51,7 @@ def upload_file():
         file.save(filepath)
         
         try:
-            # 使用Whisper模型进行转录
+            # 使用 Whisper 模型进行转录
             result = model.transcribe(filepath)
             return jsonify({
                 'success': True,
@@ -59,7 +60,6 @@ def upload_file():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
         finally:
-            # 清理上传的文件
             if os.path.exists(filepath):
                 os.remove(filepath)
     
@@ -78,24 +78,24 @@ def handle_websocket(ws):
                 audio_stream = io.BytesIO(data)
                 audio_stream.seek(0)
 
-                # 保存临时音频文件
+                # 保存为临时文件
                 temp_file = os.path.join(UPLOAD_FOLDER, 'temp_audio.wav')
                 with open(temp_file, 'wb') as f:
                     f.write(audio_stream.read())
 
-                # 使用Whisper模型进行转录
+                # 使用 Whisper 进行识别
                 result = model.transcribe(temp_file)
                 
-                # 发送转录结果
+                # 发送 JSON 格式结果
                 ws.send(json.dumps({
                     'type': 'transcription_update',
                     'text': result['text']
                 }))
+                print(f'Successfully processed audio: {result["text"]}')
 
-                # 清理临时文件
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
-                    
+
             except Exception as e:
                 print(f'Error processing audio: {e}')
                 ws.send(json.dumps({
@@ -106,4 +106,4 @@ def handle_websocket(ws):
         print(f'WebSocket error: {e}')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000, debug=True) 
+    app.run(host="0.0.0.0", port=3000, debug=True)
