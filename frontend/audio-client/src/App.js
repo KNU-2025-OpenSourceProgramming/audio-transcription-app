@@ -19,7 +19,6 @@ function App() {
   const [transcription, setTranscription] = useState('');
   const [transcriptions, setTranscriptions] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
-
   const [websocketUrl, setWebsocketUrl] = useState(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
