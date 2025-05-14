@@ -7,6 +7,7 @@ function App() {
   const [transcription, setTranscription] = useState('');
   const [loading, setLoading] = useState(false);
   const [wsStatus, setWsStatus] = useState('Not Connected');
+  const fileInputRef = React.useRef(null);
 
   function setupWebSocket() {
     const socket = new WebSocket('ws://localhost:3000/ws');
@@ -49,8 +50,13 @@ function App() {
     };
   }, []);
 
+  const handleFileClick = () => {
+    fileInputRef.current.click();
+  };
+
   const handleFileChange = (event) => {
-    setFile(event.target.files[0]);
+    const selectedFile = event.target.files[0];
+    setFile(selectedFile);
   };
 
   const handleUpload = async () => {
@@ -100,17 +106,28 @@ function App() {
       <Container maxWidth="md" sx={{ marginTop: 5 }}>
         <Paper elevation={3} sx={{ padding: 3 }}>
           <input
+            ref={fileInputRef}
             type="file"
             accept="audio/*"
             onChange={handleFileChange}
-            style={{ marginBottom: 20 }}
+            style={{ display: 'none' }}
           />
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleFileClick}
+            sx={{ marginRight: 2 }}
+          >
+            Select Audio File
+            {file && <Typography variant="caption" sx={{ marginLeft: 1 }}>
+              ({file.name})
+            </Typography>}
+          </Button>
           <Button
             variant="contained"
             color="primary"
             onClick={handleUpload}
             disabled={!file || loading}
-            sx={{ marginLeft: 2 }}
           >
             {loading ? <CircularProgress size={24} /> : 'Upload Audio'}
           </Button>
