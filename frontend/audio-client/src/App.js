@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -107,7 +107,7 @@ function App() {
   };
 
   // --- WebSocket 连接 ---
-  const setupWebSocket = () => {
+  const setupWebSocket = useCallback(() => {
     socketRef.current = new WebSocket(websocketUrl);
 
     socketRef.current.onopen = () => {
@@ -125,14 +125,14 @@ function App() {
     socketRef.current.onclose = () => {
       console.log('WebSocket closed');
     };
-  };
+  }, [websocketUrl]);
 
   useEffect(() => {
     setupWebSocket();
     return () => {
       socketRef.current?.close();
     };
-  }, [websocketUrl]);
+  }, [setupWebSocket]);
 
   // --- UI 渲染 ---
   return (
