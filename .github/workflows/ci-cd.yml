@@ -9,6 +9,7 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    environment: production
     steps:
     - uses: actions/checkout@v2
     
@@ -50,18 +51,30 @@ jobs:
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
-        ./ngrok config add-authtoken $NGROK_AUTH_TOKEN
+        if [ -z "$NGROK_AUTH_TOKEN" ]; then
+          echo "Error: NGROK_AUTH_TOKEN is not set"
+          exit 1
+        fi
+        ./ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
         cd backend
         python app.py &
         sleep 5
         ../ngrok http 3000 --log=stdout > ngrok.log &
         sleep 5
-        NGROK_URL=$(grep -o 'https://.*\.ngrok-free\.app' ngrok.log | head -n 1)
-        echo "Application will be accessible at the following URL for 5 minutes: $NGROK_URL"
-        echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+        TUNNEL_URL=$(grep -o 'https://.*\.ngrok-free\.app' ngrok.log | head -n 1)
+        if [ -z "$TUNNEL_URL" ]; then
+          echo "Error: Failed to get ngrok URL"
+          exit 1
+        fi
+        echo "TUNNEL_URL=$TUNNEL_URL" >> $GITHUB_ENV
     
     - name: Display Test URL
       run: |
-        echo "Application URL: ${{ env.NGROK_URL }}"
-        echo "URL will expire in 5 minutes. Please proceed with testing quickly."
-        sleep 300 
+        if [ -n "${{ env.TUNNEL_URL }}" ]; then
+          echo "Application URL: ${{ env.TUNNEL_URL }}"
+          echo "URL will expire in 5 minutes. Please proceed with testing quickly."
+          sleep 300
+        else
+          echo "Error: No tunnel URL available"
+          exit 1
+        fi 
