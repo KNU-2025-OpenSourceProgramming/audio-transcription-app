@@ -736,7 +736,6 @@ dev3 的 PR 首先被批准并合并后，dev4 创建 PR 时会发生冲突。
 
 ```bash
 # dev4 用户登录后
-cd  
 git checkout feature/websocket-improvements
 git fetch origin
 git merge origin/develop
