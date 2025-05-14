@@ -36,3 +36,18 @@
     transform: rotate(360deg);
   }
 }
+
+.transcription-container {
+  margin-top: 20px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.chat-bubble {
+  background-color: #f1f0f0;
+  border-radius: 10px;
+  padding: 10px 15px;
+  margin: 10px 0;
+  max-width: 80%;
+  word-wrap: break-word;
+}
